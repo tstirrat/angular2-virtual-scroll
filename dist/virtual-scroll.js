@@ -3,9 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var core_1 = require("@angular/core");
 var tween = require("@tweenjs/tween.js");
 var VirtualScrollComponent = (function () {
-    function VirtualScrollComponent(element) {
+    function VirtualScrollComponent(element, renderer, zone) {
         var _this = this;
         this.element = element;
+        this.renderer = renderer;
+        this.zone = zone;
         this.items = [];
         this.bufferAmount = 0;
         this.scrollAnimationTime = 1500;
@@ -28,21 +30,27 @@ var VirtualScrollComponent = (function () {
                 return;
             }
             this.removeParentEventHandlers(this._parentScroll);
+            this.removeParentEventHandlers(this.element.nativeElement);
             this._parentScroll = element;
             this.addParentEventHandlers(this._parentScroll);
         },
         enumerable: true,
         configurable: true
     });
-    VirtualScrollComponent.prototype.onScroll = function () {
-        this.refresh();
-    };
     VirtualScrollComponent.prototype.ngOnInit = function () {
         this.scrollbarWidth = 0; // this.element.nativeElement.offsetWidth - this.element.nativeElement.clientWidth;
         this.scrollbarHeight = 0; // this.element.nativeElement.offsetHeight - this.element.nativeElement.clientHeight;
+        if (!this.parentScroll) {
+            this.addParentEventHandlers(this.element.nativeElement);
+        }
     };
     VirtualScrollComponent.prototype.ngOnDestroy = function () {
-        this.removeParentEventHandlers(this.parentScroll);
+        if (this.parentScroll) {
+            this.removeParentEventHandlers(this.parentScroll);
+        }
+        else {
+            this.removeParentEventHandlers(this.element.nativeElement);
+        }
     };
     VirtualScrollComponent.prototype.ngOnChanges = function (changes) {
         this.previousStart = undefined;
@@ -55,7 +63,9 @@ var VirtualScrollComponent = (function () {
     };
     VirtualScrollComponent.prototype.refresh = function () {
         var _this = this;
-        requestAnimationFrame(function () { return _this.calculateItems(); });
+        this.zone.runOutsideAngular(function () {
+            requestAnimationFrame(function () { return _this.calculateItems(); });
+        });
     };
     VirtualScrollComponent.prototype.scrollInto = function (item) {
         var _this = this;
@@ -79,17 +89,23 @@ var VirtualScrollComponent = (function () {
             .start();
         var animate = function (time) {
             _this.currentTween.update(time);
-            if (_this.currentTween._object.scrollTop !== scrollTop)
-                window.requestAnimationFrame(animate);
+            if (_this.currentTween._object.scrollTop !== scrollTop) {
+                _this.zone.runOutsideAngular(function () {
+                    requestAnimationFrame(animate);
+                });
+            }
         };
         animate();
     };
     VirtualScrollComponent.prototype.addParentEventHandlers = function (parentScroll) {
+        var _this = this;
         if (parentScroll) {
-            parentScroll.addEventListener('scroll', this.refreshHandler);
-            if (parentScroll instanceof Window) {
-                parentScroll.addEventListener('resize', this.refreshHandler);
-            }
+            this.zone.runOutsideAngular(function () {
+                _this.renderer.listen(parentScroll, 'scroll', _this.refreshHandler);
+                if (parentScroll instanceof Window) {
+                    _this.renderer.listen('window', 'resize', _this.refreshHandler);
+                }
+            });
         }
     };
     VirtualScrollComponent.prototype.removeParentEventHandlers = function (parentScroll) {
@@ -162,6 +178,8 @@ var VirtualScrollComponent = (function () {
         };
     };
     VirtualScrollComponent.prototype.calculateItems = function () {
+        var _this = this;
+        core_1.NgZone.assertNotInAngularZone();
         var el = this.parentScroll instanceof Window ? document.body : this.parentScroll || this.element.nativeElement;
         var d = this.calculateDimensions();
         var items = this.items || [];
@@ -192,25 +210,27 @@ var VirtualScrollComponent = (function () {
         end += this.bufferAmount;
         end = Math.min(items.length, end);
         if (start !== this.previousStart || end !== this.previousEnd) {
-            // update the scroll list
-            this.viewPortItems = items.slice(start, end);
-            this.update.emit(this.viewPortItems);
-            // emit 'start' event
-            if (start !== this.previousStart && this.startupLoop === false) {
-                this.start.emit({ start: start, end: end });
-            }
-            // emit 'end' event
-            if (end !== this.previousEnd && this.startupLoop === false) {
-                this.end.emit({ start: start, end: end });
-            }
-            this.previousStart = start;
-            this.previousEnd = end;
-            if (this.startupLoop === true) {
-                this.refresh();
-            }
-            else {
-                this.change.emit({ start: start, end: end });
-            }
+            this.zone.run(function () {
+                // update the scroll list
+                _this.viewPortItems = items.slice(start, end);
+                _this.update.emit(_this.viewPortItems);
+                // emit 'start' event
+                if (start !== _this.previousStart && _this.startupLoop === false) {
+                    _this.start.emit({ start: start, end: end });
+                }
+                // emit 'end' event
+                if (end !== _this.previousEnd && _this.startupLoop === false) {
+                    _this.end.emit({ start: start, end: end });
+                }
+                _this.previousStart = start;
+                _this.previousEnd = end;
+                if (_this.startupLoop === true) {
+                    _this.refresh();
+                }
+                else {
+                    _this.change.emit({ start: start, end: end });
+                }
+            });
         }
         else if (this.startupLoop === true) {
             this.startupLoop = false;
@@ -231,6 +251,8 @@ var VirtualScrollComponent = (function () {
     /** @nocollapse */
     VirtualScrollComponent.ctorParameters = function () { return [
         { type: core_1.ElementRef, },
+        { type: core_1.Renderer2, },
+        { type: core_1.NgZone, },
     ]; };
     VirtualScrollComponent.propDecorators = {
         'items': [{ type: core_1.Input },],
@@ -247,7 +269,6 @@ var VirtualScrollComponent = (function () {
         'end': [{ type: core_1.Output },],
         'contentElementRef': [{ type: core_1.ViewChild, args: ['content', { read: core_1.ElementRef },] },],
         'containerElementRef': [{ type: core_1.ContentChild, args: ['container',] },],
-        'onScroll': [{ type: core_1.HostListener, args: ['scroll',] },],
     };
     return VirtualScrollComponent;
 }());

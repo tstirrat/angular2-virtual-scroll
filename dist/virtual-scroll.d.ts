@@ -1,10 +1,12 @@
-import { ElementRef, EventEmitter, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
+import { ElementRef, EventEmitter, NgZone, OnChanges, OnDestroy, OnInit, Renderer2, SimpleChanges } from '@angular/core';
 export interface ChangeEvent {
     start?: number;
     end?: number;
 }
 export declare class VirtualScrollComponent implements OnInit, OnChanges, OnDestroy {
-    private element;
+    private readonly element;
+    private readonly renderer;
+    private readonly zone;
     items: any[];
     scrollbarWidth: number;
     scrollbarHeight: number;
@@ -29,8 +31,7 @@ export declare class VirtualScrollComponent implements OnInit, OnChanges, OnDest
     startupLoop: boolean;
     currentTween: any;
     window: Window;
-    constructor(element: ElementRef);
-    onScroll(): void;
+    constructor(element: ElementRef, renderer: Renderer2, zone: NgZone);
     ngOnInit(): void;
     ngOnDestroy(): void;
     ngOnChanges(changes: SimpleChanges): void;
